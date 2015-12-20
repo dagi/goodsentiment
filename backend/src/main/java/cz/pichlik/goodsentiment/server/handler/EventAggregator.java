@@ -16,10 +16,12 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.log4j.Logger;
 
-import cz.pichlik.goodsentiment.common.CSVReader;
 import cz.pichlik.goodsentiment.common.CSVWriter;
 import cz.pichlik.goodsentiment.server.repository.S3RepositoryBase;
 
+/**
+ * Aggregates event data on the daily bases.
+ */
 public class EventAggregator {
     private static final boolean PUBLIC_READ = true;
 
@@ -27,14 +29,14 @@ public class EventAggregator {
 
     private static final String CSV_HEADERS[] = new String[]{"id", "sentimentCode", "orgUnit", "latitude", "longitude", "city", "gender", "yearsInCompany","timestamp"};
 
-    private final String eventDataBucket;
     private final String aggregatedDatabucket;
     private final S3RepositoryBase s3RepositoryBase;
+    private final EventDataReader eventDataReader;
     private long seed = System.currentTimeMillis(); //theoretically not safe
 
-    public EventAggregator(String aggregatedDatabucket, String eventDataBucket, S3RepositoryBase s3RepositoryBase) {
+    public EventAggregator(String aggregatedDatabucket, EventDataReader eventDataReader, S3RepositoryBase s3RepositoryBase) {
         super();
-        this.eventDataBucket = eventDataBucket;
+        this.eventDataReader = eventDataReader;
         this.aggregatedDatabucket = aggregatedDatabucket;
         this.s3RepositoryBase = s3RepositoryBase;
     }
@@ -43,7 +45,8 @@ public class EventAggregator {
      * Aggregates the data between two dates (inclusive). Events for single day
      * are aggregated separately.
      */
-    public void aggregateDay(LocalDate from, LocalDate to) {
+    void aggregateDay(LocalDate from, LocalDate to) {
+        log.info(format("Aggregates data from=%s to=%s", from, to));
         LocalDate date = from;
         while(date.isBefore(to) || date.isEqual(to)) {
             aggregateDay(date.getYear(), date.getMonthValue(), date.getDayOfMonth());
@@ -54,27 +57,15 @@ public class EventAggregator {
     /**
      * Aggregates the data for single day.
      */
-    public void aggregateDay(int year, int month, int day) {
-        String listKey = format("%s/%s/%s", year, month, day);
-        log.info(format("Aggregate data for ", listKey));
-        List<String> list = s3RepositoryBase.list(eventDataBucket, listKey);
+    void aggregateDay(int year, int month, int day) {
+        log.info(format("Aggregates data %s/%s/%s", year, month, day));
         AtomicLong idSeed = new AtomicLong(seed);
         File tempResultFile = null;
         try(CSVWriter writer = new CSVWriter(CSV_HEADERS)) {
-            list.stream().forEach((key) -> {
-                log.info(format("Loading file=%s", key));
-                try (CSVReader reader = new CSVReader(s3RepositoryBase.load(eventDataBucket, key))) {
-                    reader.readLines((row, rowNum) -> {
-                        if(rowNum == 0) { //skip the CSV header row
-                            return;
-                        }
-                        addRowId(idSeed, row);
-                        convertTimestampToDate(row);
-                        writer.writeRow(row);
-                    });
-                } catch(IOException e) {
-                    log.error(format("Cannot load file=%s", key));
-                }
+            eventDataReader.read(year, month, day, (row) -> {
+                addRowId(idSeed, row);
+                convertTimestampToDate(row);
+                writer.writeRow(row);
             });
             tempResultFile = writer.getTemporaryResultFile();
         } catch(IOException e) {
@@ -82,9 +73,14 @@ public class EventAggregator {
             throw new RuntimeException(e);
         }
         log.info(format("Total count=%s of events", idSeed.get() - seed));
-        String key = format("goodsentinment-data-%s-%s-%s.csv", year, month, day);
+        String key = aggregatedDataKey(year, month, day);
         log.info(format("Writing result to file=%s/%s", aggregatedDatabucket,key));
         s3RepositoryBase.save(aggregatedDatabucket, key, tempResultFile, PUBLIC_READ);
+    }
+
+    private String aggregatedDataKey(int year, int month, int day) {
+        String key = format("goodsentinment-data-%s-%s-%s.csv", year, month, day);
+        return key;
     }
 
     private void convertTimestampToDate(List<String> row) {

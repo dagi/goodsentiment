@@ -4,7 +4,6 @@
 
 package cz.pichlik.goodsentiment.server.handler;
 
-import static cz.pichlik.goodsentiment.IOUtils.closeQuietly;
 import static java.util.Arrays.asList;
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.CoreMatchers.hasItem;
@@ -13,22 +12,22 @@ import static org.hamcrest.CoreMatchers.startsWith;
 import static org.junit.Assert.assertThat;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyBoolean;
+import static org.mockito.Matchers.anyInt;
 import static org.mockito.Matchers.anyString;
 import static org.mockito.Matchers.endsWith;
 import static org.mockito.Matchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
 import java.io.File;
 import java.io.FileReader;
-import java.io.InputStream;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
 import org.apache.commons.io.IOUtils;
 import org.hamcrest.core.StringEndsWith;
-import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
@@ -37,31 +36,23 @@ import cz.pichlik.goodsentiment.server.repository.S3RepositoryBase;
 
 @SuppressWarnings("unchecked")
 public class EventAggregatorTest {
-    private static final String EVENT_BUCKET = "eventDataBucket";
+
     private static final String AGGREGATED_BUCKET = "aggregatedDatabucket";
     private EventAggregator eventAggregator;
     private S3RepositoryBase s3Repo = mock(S3RepositoryBase.class);
-    private InputStream csvFile1;
-    private InputStream csvFile2;
+    private EventDataReader eventDataReader = mock(EventDataReader.class);
 
     @Before
     public void setUp() throws Exception {
-        this.eventAggregator = new EventAggregator(AGGREGATED_BUCKET, EVENT_BUCKET, s3Repo);
+        this.eventAggregator = new EventAggregator(AGGREGATED_BUCKET, eventDataReader, s3Repo);
         this.eventAggregator.setSeed(0);
-        this.csvFile1 = getClass().getClassLoader().getResourceAsStream("01e97d6d-1925-46c0-8b8c-51e024ddde7b.csv");
-        this.csvFile2 = getClass().getClassLoader().getResourceAsStream("07965a5b-f36a-46a9-8580-4827583791b2.csv");
-        String firstFile = "csvFile1";
-        String secondFile = "csvFile2";
-        when(s3Repo.list(eq(EVENT_BUCKET), eq("2015/12/14"))).thenReturn(asList(firstFile, secondFile));
-        when(s3Repo.load(eq(EVENT_BUCKET), eq(firstFile))).thenReturn(csvFile1);
-        when(s3Repo.load(eq(EVENT_BUCKET), eq(secondFile))).thenReturn(csvFile2);
-    }
-
-    @After
-    public void tearDown() {
-        closeQuietly(csvFile1);
-        closeQuietly(csvFile2);
-    }
+        doAnswer((i) -> {
+            Object[] arguments = i.getArguments();
+            Consumer<List<String>> callback = (Consumer<List<String>>) arguments[3];
+            callback.accept(new ArrayList<>(asList("0","DevOps","49.2","16.6167","Brno","Male","6","1449770125")));
+            return null;
+        }).when(eventDataReader).read(anyInt(), anyInt(), anyInt(), any(Consumer.class));
+     }
 
     @Test
     public void resultCSVHasHeader() throws Exception{
@@ -78,7 +69,6 @@ public class EventAggregatorTest {
         try(FileReader fr = new FileReader(resultFile)) {
             List<String> result = IOUtils.readLines(fr);
             assertThat(result, hasItems(startsWith("0")));
-            assertThat(result, hasItems(startsWith("1")));
         }
     }
 
@@ -88,7 +78,6 @@ public class EventAggregatorTest {
         try(FileReader fr = new FileReader(resultFile)) {
             List<String> result = IOUtils.readLines(fr);
             assertThat(result, hasItems(StringEndsWith.endsWith("2015-12-10T17:55:25")));
-            assertThat(result, hasItems(StringEndsWith.endsWith("2015-12-10T16:40:18")));
         }
     }
 
@@ -110,7 +99,6 @@ public class EventAggregatorTest {
         try(FileReader fr = new FileReader(resultFile)) {
             List<String> result = IOUtils.readLines(fr);
             assertThat(result, hasItems(containsString("0,DevOps,49.2,16.6167,Brno,Male,6")));
-            assertThat(result, hasItems(containsString("-100,Marketing,37.7833,-122.4167,San Francisco,Female,4")));
         }
     }
 
@@ -119,8 +107,8 @@ public class EventAggregatorTest {
         LocalDate from = LocalDate.of(2015, 9, 1);
         LocalDate to = LocalDate.of(2015, 9, 2);
         eventAggregator.aggregateDay(from, to);
-        verify(s3Repo).list(eq(EVENT_BUCKET), eq("2015/9/1"));
-        verify(s3Repo).list(eq(EVENT_BUCKET), eq("2015/9/2"));
+        verify(eventDataReader).read(eq(2015), eq(9), eq(1), any(Consumer.class));
+        verify(eventDataReader).read(eq(2015), eq(9), eq(2), any(Consumer.class));
     }
 
     private File aggregateSingle() {

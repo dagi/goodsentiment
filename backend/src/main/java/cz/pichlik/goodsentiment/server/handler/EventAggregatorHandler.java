@@ -8,19 +8,35 @@ import java.time.LocalDate;
 
 import cz.pichlik.goodsentiment.server.ioc.ObjectFactory;
 
+/**
+ * The AWS lambda function interface for the daily aggregator. It supports
+ * aggregation for the current day or all dates.
+ */
 public class EventAggregatorHandler {
-    private ObjectFactory objectFactory = new ObjectFactory();
+
+    private final EventAggregator eventAggregator;
+    private final LocalDate startingDay;
+
+    public EventAggregatorHandler() {
+        ObjectFactory objectFactory = new ObjectFactory();
+        this.eventAggregator = objectFactory.eventAggregator();
+        this.startingDay = objectFactory.startingDay();
+    }
+
+    public EventAggregatorHandler(EventAggregator eventAggregator, LocalDate startingDay) {
+        super();
+        this.eventAggregator = eventAggregator;
+        this.startingDay = startingDay;
+    }
 
     public void daily() {
-        EventAggregator eventAggregator = objectFactory.eventAggregator();
         LocalDate now = LocalDate.now();
         eventAggregator.aggregateDay(now.getYear(), now.getMonthValue(), now.getDayOfMonth());
     }
 
     public void allData() {
-        EventAggregator eventAggregator = objectFactory.eventAggregator();
-        LocalDate from = LocalDate.of(2015, 12, 10); //this is a date when we got first data
+        //this is a date when we got first data
         LocalDate to = LocalDate.now();
-        eventAggregator.aggregateDay(from, to);
+        eventAggregator.aggregateDay(startingDay, to);
     }
 }
