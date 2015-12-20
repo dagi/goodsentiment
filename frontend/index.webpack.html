@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en" manifest="manifest.manifest">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="apple-mobile-web-app-capable" content="yes">
+
+    <title>{%=o.htmlWebpackPlugin.options.title%}</title>
+
+    <link rel="manifest" href="/manifest.json">
+
+    {% for (var css in o.htmlWebpackPlugin.files.css) { %}
+        <link href="{%=o.htmlWebpackPlugin.files.css[css] %}" rel="stylesheet">
+    {% } %}
+</head>
+
+<body>
+    <div id="app"></div>
+
+    {% for (var chunk in o.htmlWebpackPlugin.assets) { %}
+        <script src="{%=o.htmlWebpackPlugin.assets[chunk]%}"></script>
+    {% } %}
+</body>
+</html>
