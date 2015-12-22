@@ -57,9 +57,9 @@ public class DataJarAggregator {
     private File writeToTempFile(final AtomicInteger happyCounter, final AtomicInteger unhappyCounter, AtomicInteger neutralCounter) throws IOException {
         File tempDataFile = File.createTempFile("datajar", "txt");
         try (FileWriter writer = new FileWriter(tempDataFile)) {
-            writer.write(format("happy=%s\n", happyCounter.get()));
-            writer.write(format("unhappy=%s\n", unhappyCounter.get()));
-            writer.write(format("neutral=%s\n", neutralCounter.get()));
+            writer.write(format("%s\n", happyCounter.get()));
+            writer.write(format("%s\n", unhappyCounter.get()));
+            writer.write(format("%s\n", neutralCounter.get()));
         }
         return tempDataFile;
     }

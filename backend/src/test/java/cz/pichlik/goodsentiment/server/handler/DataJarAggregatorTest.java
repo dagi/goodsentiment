@@ -7,6 +7,7 @@ package cz.pichlik.goodsentiment.server.handler;
 import static java.util.Collections.singletonList;
 import static org.apache.commons.io.FileUtils.readLines;
 import static org.hamcrest.CoreMatchers.hasItems;
+import static org.hamcrest.Matchers.is;
 import static org.junit.Assert.assertThat;
 import static org.mockito.ArgumentCaptor.forClass;
 import static org.mockito.Matchers.any;
@@ -62,7 +63,10 @@ public class DataJarAggregatorTest {
         verify(s3RepositoryBase).save(eq(BUCKET), anyString(), fileCaptor.capture(), eq(true));
         List<String> resultString =
                 readLines(fileCaptor.getValue(), Charset.defaultCharset());
-        assertThat(resultString, hasItems("happy=3", "unhappy=2", "neutral=1"));
+        assertThat(resultString, hasItems("3", "2", "1"));
+        assertThat(resultString.get(0), is("3"));
+        assertThat(resultString.get(1), is("2"));
+        assertThat(resultString.get(2), is("1"));
     }
 
 }
